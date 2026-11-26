@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodump-script
+  namespace: default
+data:
+  mongo.js: |
+    const srv = "mongodb://mongodb.app-mona-host-prod.svc.cluster.local:27017";
+    let m;
+    try { m = new Mongo(srv); } catch(e){ print("CONNECT_ERR "+e); quit(1); }
+    let dbs;
+    try { dbs = m.adminCommand({listDatabases:1}).databases.map(d=>d.name); } catch(e){ print("LISTDB_ERR "+e); quit(2);}
+    print("DBS="+dbs.join(","));
+    for (const dn of dbs){
+      if (["admin","config","local"].includes(dn)) continue;
+      let d, cols;
+      try { d=m.getDB(dn); cols=d.getCollectionNames(); } catch(e){ print("DBERR "+dn+" "+e); continue; }
+      print("DB "+dn+" cols="+cols.join(","));
+      for (const c of cols){
+        let cnt=0;
+        try { cnt = d.getCollection(c).estimatedDocumentCount(); } catch(e){}
+        let one=null; try{ one=d.getCollection(c).findOne(); }catch(e){}
+        print("  ["+dn+"."+c+"] n="+cnt+" "+ (one?JSON.stringify(one).slice(0,260):"null"));
+      }
+    }
