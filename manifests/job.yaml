@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pveprobe-1795719200
+  namespace: default
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: pveprobe
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: probe
+        image: curlimages/curl:8.10.1
+        command: ["/bin/sh","/scripts/probe.sh"]
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: scripts
+        configMap:
+          name: pveprobe-script
+          defaultMode: 0755
