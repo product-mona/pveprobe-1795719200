@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodump-1795719200
+  namespace: default
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 7200
+  template:
+    metadata:
+      labels:
+        app: mongodump
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: m
+        image: mongo:6
+        command: ["mongosh","--nodb","--quiet","/scripts/mongo.js"]
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: scripts
+        configMap:
+          name: mongodump-script
+          defaultMode: 0755
